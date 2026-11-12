@@ -1,0 +1,28 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+
+# Virtual environment (it's recreated from requirements.txt, never committed)
+venv/
+.venv/
+
+# Test and tool caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- Secrets ----
+# Real credentials live in .env and must never reach GitHub.
+.env
+# .env.example is the safe template, so we explicitly allow it.
+!.env.example
+
+# ---- Frontend (Next.js) ----
+node_modules/
+.next/
+out/
+
+# ---- Editor and OS files ----
+.vscode/
+.DS_Store
+Thumbs.db
