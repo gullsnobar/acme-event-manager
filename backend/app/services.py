@@ -1,5 +1,7 @@
 """Business logic and database operations, kept separate from API routes."""
 
+from datetime import date, datetime, time, timedelta, timezone
+
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,10 +28,37 @@ async def create_event(db: AsyncSession, data: EventCreate) -> Event:
     return event
 
 
-async def list_events(db: AsyncSession) -> list[Event]:
-    """Return all events in chronological order."""
+async def list_events(
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 10,
+    title: str | None = None,
+    event_date: date | None = None,
+) -> list[Event]:
+    """Return a filtered page of events in chronological order."""
 
-    statement = select(Event).order_by(Event.event_date, Event.id)
+    statement = select(Event)
+
+    if title is not None:
+        statement = statement.where(Event.title.ilike(f"%{title}%"))
+
+    if event_date is not None:
+        day_start = datetime.combine(
+            event_date,
+            time.min,
+            tzinfo=timezone.utc,
+        )
+        day_end = day_start + timedelta(days=1)
+        statement = statement.where(
+            Event.event_date >= day_start,
+            Event.event_date < day_end,
+        )
+
+    statement = (
+        statement.order_by(Event.event_date, Event.id)
+        .offset(skip)
+        .limit(limit)
+    )
     result = await db.execute(statement)
     return list(result.scalars().all())
 
@@ -143,14 +172,18 @@ async def register_for_event(
 async def list_registrations(
     db: AsyncSession,
     event_id: int,
+    skip: int = 0,
+    limit: int = 10,
 ) -> list[Registration]:
-    """Return an event's registrations in registration order."""
+    """Return a page of an event's registrations in registration order."""
 
     await get_event(db, event_id)
     statement = (
         select(Registration)
         .where(Registration.event_id == event_id)
         .order_by(Registration.registered_at)
+        .offset(skip)
+        .limit(limit)
     )
     result = await db.execute(statement)
     return list(result.scalars().all())
