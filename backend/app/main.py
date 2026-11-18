@@ -12,7 +12,14 @@ from sqlalchemy.exc import SQLAlchemyError
 # Models must be imported so Base knows about the tables.
 from . import models, services
 from .db import Base, DbSession, engine, settings
-from .schemas import ErrorResponse, EventCreate, EventRead, EventUpdate
+from .schemas import (
+    ErrorResponse,
+    EventCreate,
+    EventRead,
+    EventUpdate,
+    RegistrationCreate,
+    RegistrationRead,
+)
 from .services import ConflictError, NotFoundError
 
 
@@ -146,6 +153,10 @@ async def get_event(event_id: int, db: DbSession) -> EventRead:
             "model": ErrorResponse,
             "description": "Event not found.",
         },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": "Capacity conflicts with existing registrations.",
+        },
         status.HTTP_422_UNPROCESSABLE_CONTENT: {
             "model": ErrorResponse,
             "description": "Event data is invalid.",
@@ -178,3 +189,76 @@ async def delete_event(event_id: int, db: DbSession) -> None:
     """Delete an event by its identifier."""
 
     await services.delete_event(db, event_id)
+
+
+@app.post(
+    "/events/{event_id}/registrations",
+    response_model=RegistrationRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Registrations"],
+    summary="Register for an event",
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorResponse,
+            "description": "Event not found.",
+        },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": "Email is already registered or the event is full.",
+        },
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
+            "model": ErrorResponse,
+            "description": "Registration data is invalid.",
+        },
+    },
+)
+async def register_for_event(
+    event_id: int,
+    data: RegistrationCreate,
+    db: DbSession,
+) -> RegistrationRead:
+    """Register an employee for an event with an available seat."""
+
+    return await services.register_for_event(db, event_id, data)
+
+
+@app.get(
+    "/events/{event_id}/registrations",
+    response_model=list[RegistrationRead],
+    tags=["Registrations"],
+    summary="List event registrations",
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorResponse,
+            "description": "Event not found.",
+        },
+    },
+)
+async def list_registrations(
+    event_id: int,
+    db: DbSession,
+) -> list[RegistrationRead]:
+    """List all employees registered for an event."""
+
+    return await services.list_registrations(db, event_id)
+
+
+@app.delete(
+    "/registrations/{registration_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Registrations"],
+    summary="Cancel a registration",
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorResponse,
+            "description": "Registration not found.",
+        },
+    },
+)
+async def cancel_registration(
+    registration_id: int,
+    db: DbSession,
+) -> None:
+    """Cancel one employee's event registration."""
+
+    await services.cancel_registration(db, registration_id)
