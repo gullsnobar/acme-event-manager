@@ -6,8 +6,9 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Event, Registration
-from .schemas import EventCreate, EventUpdate, RegistrationCreate
+from .auth import hash_password, verify_password
+from .models import Event, Registration, User
+from .schemas import EventCreate, EventUpdate, RegistrationCreate, UserCreate
 
 
 class NotFoundError(Exception):
@@ -16,6 +17,62 @@ class NotFoundError(Exception):
 
 class ConflictError(Exception):
     """Indicate that a requested operation conflicts with existing data."""
+
+
+async def create_user(db: AsyncSession, data: UserCreate) -> User:
+    """Create an employee account when its email is not already registered."""
+
+    email_statement = select(User.id).where(User.email == data.email)
+    email_result = await db.execute(email_statement)
+
+    if email_result.scalar_one_or_none() is not None:
+        raise ConflictError("An account with this email already exists.")
+
+    user = User(
+        full_name=data.full_name,
+        email=data.email,
+        hashed_password=hash_password(data.password),
+    )
+    db.add(user)
+
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise ConflictError(
+            "An account with this email already exists."
+        ) from exc
+
+    await db.refresh(user)
+    return user
+
+
+async def authenticate_user(
+    db: AsyncSession,
+    email: str,
+    password: str,
+) -> User | None:
+    """Return a user when the email and password are valid."""
+
+    statement = select(User).where(User.email == email.strip().lower())
+    result = await db.execute(statement)
+    user = result.scalar_one_or_none()
+
+    if user is None or not verify_password(password, user.hashed_password):
+        return None
+
+    return user
+
+
+async def get_user_by_id(
+    db: AsyncSession,
+    user_id: int,
+) -> User | None:
+    """Return one user by identifier or None when it does not exist."""
+
+    statement = select(User).where(User.id == user_id)
+    result = await db.execute(statement)
+    return result.scalar_one_or_none()
 
 
 async def create_event(db: AsyncSession, data: EventCreate) -> Event:

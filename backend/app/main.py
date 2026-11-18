@@ -5,14 +5,16 @@ from contextlib import asynccontextmanager
 from datetime import date as Date
 from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 # Models must be imported so Base knows about the tables.
 from . import models, services
+from .auth import CurrentUser, create_access_token
 from .db import Base, DbSession, engine, settings
 from .schemas import (
     ErrorResponse,
@@ -21,6 +23,9 @@ from .schemas import (
     EventUpdate,
     RegistrationCreate,
     RegistrationRead,
+    Token,
+    UserCreate,
+    UserRead,
 )
 from .services import ConflictError, NotFoundError
 
@@ -55,6 +60,83 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.post(
+    "/auth/register",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Auth"],
+    summary="Register an account",
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": "An account with this email already exists.",
+        },
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
+            "model": ErrorResponse,
+            "description": "Account data is invalid.",
+        },
+    },
+)
+async def register_user(data: UserCreate, db: DbSession) -> UserRead:
+    """Create an employee account."""
+
+    return await services.create_user(db, data)
+
+
+@app.post(
+    "/auth/login",
+    response_model=Token,
+    tags=["Auth"],
+    summary="Log in",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorResponse,
+            "description": "Email or password is incorrect.",
+        },
+    },
+)
+async def login(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: DbSession,
+) -> Token:
+    """Authenticate an employee and return a bearer token."""
+
+    user = await services.authenticate_user(
+        db,
+        form_data.username,
+        form_data.password,
+    )
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return Token(
+        access_token=create_access_token(str(user.id)),
+        token_type="bearer",
+    )
+
+
+@app.get(
+    "/auth/me",
+    response_model=UserRead,
+    tags=["Auth"],
+    summary="Get the current account",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorResponse,
+            "description": "Credentials could not be validated.",
+        },
+    },
+)
+async def get_current_account(current_user: CurrentUser) -> UserRead:
+    """Return the account represented by the bearer token."""
+
+    return current_user
 
 
 @app.exception_handler(NotFoundError)
@@ -108,8 +190,18 @@ async def health_check(db: DbSession) -> dict[str, str]:
     status_code=status.HTTP_201_CREATED,
     tags=["Events"],
     summary="Create an event",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorResponse,
+            "description": "Authentication is required.",
+        },
+    },
 )
-async def create_event(data: EventCreate, db: DbSession) -> EventRead:
+async def create_event(
+    data: EventCreate,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> EventRead:
     """Create a new employee event."""
 
     return await services.create_event(db, data)
@@ -194,6 +286,10 @@ async def get_event(event_id: int, db: DbSession) -> EventRead:
             "model": ErrorResponse,
             "description": "Capacity conflicts with existing registrations.",
         },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorResponse,
+            "description": "Authentication is required.",
+        },
         status.HTTP_422_UNPROCESSABLE_CONTENT: {
             "model": ErrorResponse,
             "description": "Event data is invalid.",
@@ -204,6 +300,7 @@ async def update_event(
     event_id: int,
     data: EventUpdate,
     db: DbSession,
+    current_user: CurrentUser,
 ) -> EventRead:
     """Replace every editable field on an event."""
 
@@ -220,9 +317,17 @@ async def update_event(
             "model": ErrorResponse,
             "description": "Event not found.",
         },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorResponse,
+            "description": "Authentication is required.",
+        },
     },
 )
-async def delete_event(event_id: int, db: DbSession) -> None:
+async def delete_event(
+    event_id: int,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> None:
     """Delete an event by its identifier."""
 
     await services.delete_event(db, event_id)
