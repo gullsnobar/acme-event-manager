@@ -2,7 +2,14 @@
 
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    computed_field,
+    field_validator,
+)
 
 
 class EventFields(BaseModel):
@@ -74,6 +81,50 @@ class EventRead(EventFields):
 
     id: int
     created_at: datetime
+    registered_count: int
+
+    @computed_field
+    @property
+    def seats_left(self) -> int:
+        """Return the number of registration places still available."""
+
+        return self.capacity - self.registered_count
+
+
+class RegistrationCreate(BaseModel):
+    """Validate the employee details used to register for an event."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    employee_name: str = Field(
+        min_length=1,
+        max_length=120,
+        description="Full name of the employee attending the event.",
+        examples=["Ali Khan"],
+    )
+    employee_email: EmailStr = Field(
+        description="Work email address used to identify the attendee.",
+        examples=["ali.khan@acme.com"],
+    )
+
+    @field_validator("employee_email")
+    @classmethod
+    def lowercase_email(cls, value: EmailStr) -> str:
+        """Store email addresses in lowercase for consistent comparisons."""
+
+        return value.lower()
+
+
+class RegistrationRead(BaseModel):
+    """Serialize a registration returned from the database."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    event_id: int
+    employee_name: str
+    employee_email: EmailStr
+    registered_at: datetime
 
 
 class ErrorResponse(BaseModel):
