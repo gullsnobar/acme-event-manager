@@ -2,8 +2,10 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import date as Date
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -119,10 +121,45 @@ async def create_event(data: EventCreate, db: DbSession) -> EventRead:
     tags=["Events"],
     summary="List events",
 )
-async def list_events(db: DbSession) -> list[EventRead]:
-    """List all events by date, then by identifier."""
+async def list_events(
+    db: DbSession,
+    skip: Annotated[
+        int,
+        Query(
+            ge=0,
+            description="Number of matching events to skip.",
+        ),
+    ] = 0,
+    limit: Annotated[
+        int,
+        Query(
+            ge=1,
+            le=100,
+            description="Maximum number of events to return.",
+        ),
+    ] = 10,
+    title: Annotated[
+        str | None,
+        Query(
+            description="Case-insensitive text to find within event titles."
+        ),
+    ] = None,
+    date: Annotated[
+        Date | None,
+        Query(
+            description="UTC calendar date on which the event occurs."
+        ),
+    ] = None,
+) -> list[EventRead]:
+    """List a filtered page of events by date, then by identifier."""
 
-    return await services.list_events(db)
+    return await services.list_events(
+        db,
+        skip=skip,
+        limit=limit,
+        title=title,
+        event_date=date,
+    )
 
 
 @app.get(
@@ -237,10 +274,30 @@ async def register_for_event(
 async def list_registrations(
     event_id: int,
     db: DbSession,
+    skip: Annotated[
+        int,
+        Query(
+            ge=0,
+            description="Number of matching registrations to skip.",
+        ),
+    ] = 0,
+    limit: Annotated[
+        int,
+        Query(
+            ge=1,
+            le=100,
+            description="Maximum number of registrations to return.",
+        ),
+    ] = 10,
 ) -> list[RegistrationRead]:
-    """List all employees registered for an event."""
+    """List a page of employees registered for an event."""
 
-    return await services.list_registrations(db, event_id)
+    return await services.list_registrations(
+        db,
+        event_id,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @app.delete(
