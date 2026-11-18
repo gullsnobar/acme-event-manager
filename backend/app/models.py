@@ -18,6 +18,27 @@ from sqlalchemy.orm import Mapped, column_property, mapped_column
 from .db import Base
 
 
+class User(Base):
+    """Represent an employee account that can manage events."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(
+        String(254),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+    full_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
 class Registration(Base):
     """Represent an employee's registration for an event."""
 

@@ -127,6 +127,52 @@ class RegistrationRead(BaseModel):
     registered_at: datetime
 
 
+class UserCreate(BaseModel):
+    """Validate the details used to create an employee account."""
+
+    full_name: str = Field(
+        min_length=1,
+        max_length=120,
+        description="Full name of the employee who owns the account.",
+        examples=["Ali Khan"],
+    )
+    email: EmailStr = Field(
+        description="Work email address used to sign in.",
+        examples=["ali.khan@acme.com"],
+    )
+    password: str = Field(
+        min_length=8,
+        max_length=128,
+        description="Password used to protect the account.",
+        examples=["correct horse battery staple"],
+    )
+
+    @field_validator("email")
+    @classmethod
+    def lowercase_email(cls, value: EmailStr) -> str:
+        """Store account email addresses in lowercase for consistent sign-in."""
+
+        return value.lower()
+
+
+class UserRead(BaseModel):
+    """Serialize public account details without exposing the password hash."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    full_name: str
+    email: EmailStr
+    created_at: datetime
+
+
+class Token(BaseModel):
+    """Return the bearer token created after a successful sign-in."""
+
+    access_token: str
+    token_type: str
+
+
 class ErrorResponse(BaseModel):
     """Describe a plain-language API error response."""
 
