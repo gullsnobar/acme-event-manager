@@ -291,6 +291,10 @@ Commit messages follow the `type(scope): summary` convention, as in `feat(auth):
 
 AI tools were used as learning and development assistants for planning, explanation, prompt refinement, and code generation. The developer reviewed each change and remained responsible for testing and commits; see the [AI usage documentation](ai-usage/README.md) for details.
 
+## Demo video
+
+[Watch the project demo](https://drive.google.com/file/d/149Ot3Em3tParNv4fc5DU85VlP_pLIqCB/view?usp=sharing)
+
 ## Author
 
 Gull Snobar
